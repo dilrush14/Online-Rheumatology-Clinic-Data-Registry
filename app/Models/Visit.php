@@ -15,6 +15,7 @@ class Visit extends Model
         'provisional_diagnoses',    // JSON [{code,title}]
         'plan',
         'notes',
+
     ];
 
     protected $casts = [
@@ -28,4 +29,5 @@ class Visit extends Model
     {
         return $this->belongsTo(Patient::class);
     }
+    
 }

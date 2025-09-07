@@ -22,7 +22,7 @@ export default function Edit() {
     return (
             <AppShell>
                 <PageHeader
-                    title="Create New User"
+                    title="Edit User"
                     actions={<BackButton />}
                 />
     

@@ -1,6 +1,6 @@
 // D:\rheumatology\project-rheuma\resources\js\Pages\Doctor\Patient\Edit.jsx
 import React, { useEffect } from 'react';
-import { useForm, Link, usePage, router } from '@inertiajs/react';
+import { useForm, Link, usePage } from '@inertiajs/react';
 import { route } from 'ziggy-js';
 import AppShell from '@/components/app-shell';
 import {
@@ -80,7 +80,7 @@ const ErrorText = ({ children }) =>
   children ? <p className="mt-1.5 text-xs font-medium text-red-600">{children}</p> : null;
 
 export default function Edit() {
-  const { patient, lists } = usePage().props;
+  const { patient, lists = {} } = usePage().props;
 
   // ---- parse allergies coming from backend (string or object) ----
   const parsedAllergies = (() => {
@@ -88,7 +88,9 @@ export default function Edit() {
       if (!patient?.allergies) return { types: [], note: '' };
       if (typeof patient.allergies === 'string') {
         const val = JSON.parse(patient.allergies);
-        return val && typeof val === 'object' ? { types: val.types || [], note: val.note || '' } : { types: [], note: '' };
+        return val && typeof val === 'object'
+          ? { types: val.types || [], note: val.note || '' }
+          : { types: [], note: '' };
       }
       if (typeof patient.allergies === 'object') {
         return { types: patient.allergies.types || [], note: patient.allergies.note || '' };
@@ -99,7 +101,7 @@ export default function Edit() {
     }
   })();
 
-  const { data, setData, processing, errors } = useForm({
+  const form = useForm({
     // Identification
     national_id: patient.national_id || '',
     title: patient.title || '',
@@ -140,7 +142,7 @@ export default function Edit() {
     // Clinical
     chronic_conditions: patient.chronic_conditions || '',
     disability_status: patient.disability_status || '',
-    allergies: parsedAllergies, // ← object in UI
+    allergies: parsedAllergies, // object in UI
 
     // Media
     photo: null,
@@ -148,6 +150,8 @@ export default function Edit() {
     // Notes
     remarks: patient.remarks || '',
   });
+
+  const { data, setData, processing, errors } = form;
 
   // Auto-calc age when DOB changes
   useEffect(() => {
@@ -176,24 +180,36 @@ export default function Edit() {
   const toTitle = (s) => s.charAt(0).toUpperCase() + s.slice(1);
 
   const handleSubmit = (e) => {
-    e.preventDefault();
+  e.preventDefault();
 
-    // ---- serialize allergies to string to satisfy backend validation ----
-    const payload = {
-      ...data,
-      allergies:
-        data.allergies && typeof data.allergies === 'object'
-          ? JSON.stringify(data.allergies)
-          : (data.allergies || ''),
-      _method: 'put',
-    };
+  const hasFile = data.photo instanceof File;
 
-    router.post(
-      route('doctor.patients.update', patient.id),
-      payload,
-      { forceFormData: true, preserveScroll: true }
-    );
-  };
+  // Transform payload for this submit only
+  form.transform((payload) => ({
+    ...payload,
+    // stringify allergies ONLY when using FormData
+    allergies: hasFile ? JSON.stringify(payload.allergies || {}) : (payload.allergies || {}),
+    // when a file is present, use POST + method spoofing
+    ...(hasFile ? { _method: 'PUT' } : {}),
+  }));
+
+  if (hasFile) {
+    // ✅ File path: POST + _method=PUT + FormData
+    form.post(route('doctor.patients.update', patient.id), {
+      forceFormData: true,
+      preserveScroll: true,
+      onSuccess: () => form.clearErrors(),
+      onFinish: () => form.setData('photo', null),
+    });
+  } else {
+    // ✅ No file: normal PUT (JSON)
+    form.put(route('doctor.patients.update', patient.id), {
+      preserveScroll: true,
+      onSuccess: () => form.clearErrors(),
+    });
+  }
+};
+
 
   return (
     <AppShell>
@@ -257,8 +273,8 @@ export default function Edit() {
                   Save your changes when you’re done editing.
                 </p>
                 <button
-                  type="button"
-                  onClick={handleSubmit}
+                  type="submit"
+                  form="patient-edit-form"
                   disabled={processing}
                   className="mt-3 inline-flex w-full items-center justify-center rounded-lg bg-indigo-600 px-4 py-2.5 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
                 >
@@ -270,6 +286,7 @@ export default function Edit() {
 
           {/* Main form */}
           <form
+            id="patient-edit-form"
             onSubmit={handleSubmit}
             className="md:col-span-2 space-y-6"
             encType="multipart/form-data"
@@ -353,7 +370,7 @@ export default function Edit() {
                     onChange={(e) => setData('ethnicity', e.target.value)}
                   >
                     <option value="">Select</option>
-                    {lists.ethnicities?.map((e) => (
+                    {(lists.ethnicities || ['Sinhalese','Tamil','Moor','Indian Tamil','Other']).map((e) => (
                       <option key={e} value={e}>{e}</option>
                     ))}
                   </Select>
@@ -462,7 +479,7 @@ export default function Edit() {
                     onChange={(e) => setData('district', e.target.value)}
                   >
                     <option value="">Select</option>
-                    {lists.districts?.map((d) => (
+                    {(lists.districts || []).map((d) => (
                       <option key={d} value={d}>{d}</option>
                     ))}
                   </Select>
@@ -476,7 +493,7 @@ export default function Edit() {
                     onChange={(e) => setData('province', e.target.value)}
                   >
                     <option value="">Select</option>
-                    {lists.provinces?.map((p) => (
+                    {(lists.provinces || []).map((p) => (
                       <option key={p} value={p}>{p}</option>
                     ))}
                   </Select>
@@ -539,7 +556,7 @@ export default function Edit() {
                     onChange={(e) => setData('religion', e.target.value)}
                   >
                     <option value="">Select</option>
-                    {lists.religions?.map((r) => (
+                    {(lists.religions || ['Buddhism','Hinduism','Islam','Christianity','Other']).map((r) => (
                       <option key={r} value={r}>{r}</option>
                     ))}
                   </Select>
@@ -596,7 +613,7 @@ export default function Edit() {
                     <Label>Allergies (select all that apply)</Label>
                   </div>
                   <div className="flex flex-wrap gap-2">
-                    {lists.allergyTypes?.map((t) => (
+                    {(lists.allergyTypes || ['food','animal','medicine']).map((t) => (
                       <button
                         type="button"
                         key={t}
@@ -612,6 +629,8 @@ export default function Edit() {
                       </button>
                     ))}
                   </div>
+                  {/* Root and nested errors */}
+                  <ErrorText>{errors.allergies}</ErrorText>
                   <ErrorText>{errors['allergies.types'] || errors['allergies.types.*']}</ErrorText>
                 </div>
 

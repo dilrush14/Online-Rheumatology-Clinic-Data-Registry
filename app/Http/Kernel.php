@@ -37,6 +37,7 @@ class Kernel extends HttpKernel
     'doctor' => \App\Http\Middleware\EnsureUserIsDoctor::class,
     'nurse' => \App\Http\Middleware\EnsureUserIsNurse::class,
     'consultant' => \App\Http\Middleware\EnsureUserIsConsultant::class,
+
 ];
 
 }

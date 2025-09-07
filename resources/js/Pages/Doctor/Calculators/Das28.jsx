@@ -1,5 +1,6 @@
-import React, { useMemo, useState } from 'react';
-import { Head, Link, useForm, usePage, router } from '@inertiajs/react';
+// resources/js/Pages/Doctor/Calculators/Das28.jsx
+import React, { useMemo, useState, useEffect } from 'react';
+import { Head, Link, usePage, router } from '@inertiajs/react';
 import { route } from 'ziggy-js';
 import AppShell from '@/components/app-shell';
 import JointFigure from './Components/JointFigure';
@@ -72,7 +73,8 @@ const faceForGh = (ghValue) => {
 };
 
 export default function Das28() {
-  const { patient, flash } = usePage().props;
+  // Now also receives prefill + mode from the controller when editing
+  const { patient, flash, prefill = null, mode = "create" } = usePage().props;
 
   const [tender, setTender] = useState([]);
   const [swollen, setSwollen] = useState([]);
@@ -80,6 +82,17 @@ export default function Das28() {
   const [esr, setEsr] = useState('');
   const [crp, setCrp] = useState('');
   const [gh,  setGh]  = useState(''); // 0–100
+
+  // Prefill when editing
+  useEffect(() => {
+    if (!prefill) return;
+    setVariant(prefill.variant ?? 'ESR');
+    setEsr(prefill.esr ?? '');
+    setCrp(prefill.crp ?? '');
+    setGh(prefill.gh ?? '');
+    setTender(Array.isArray(prefill.tender_joints) ? prefill.tender_joints : []);
+    setSwollen(Array.isArray(prefill.swollen_joints) ? prefill.swollen_joints : []);
+  }, [prefill]);
 
   const tjc = tender.length;
   const sjc = swollen.length;
@@ -91,13 +104,7 @@ export default function Das28() {
   const currentCategory = variant === 'ESR' ? categoryESR(currentScore) : categoryCRP(currentScore);
   const meta = categoryMeta(currentCategory);
 
-  const form = useForm({
-    variant: null, esr: null, crp: null, gh: null,
-    sjc28: 0, tjc28: 0, swollen_joints: [], tender_joints: [],
-    score: 0, category: '',
-  });
-
-  /*const onSave = () => {
+  const onSave = () => {
     const payload = {
       variant,
       esr: esr ? Number(esr) : null,
@@ -111,38 +118,18 @@ export default function Das28() {
       category: currentCategory,
     };
 
-    form.post(route('doctor.patients.calculators.das28.store', patient.id), {
-      data: payload,
-      preserveScroll: true,
-      onSuccess: () => {
-        // Force navigation even if server returns 302
-        router.visit(route('doctor.patients.overview', patient.id));
-      },
-    });
-  };*/
-
-
-  const onSave = () => {
-  const payload = {
-    variant,
-    esr: esr ? Number(esr) : null,
-    crp: crp ? Number(crp) : null,
-    gh:  gh ? Number(gh) : null,
-    sjc28: sjc,
-    tjc28: tjc,
-    swollen_joints: swollen,
-    tender_joints: tender,
-    score: Number((currentScore ?? 0).toFixed(2)),
-    category: currentCategory,
+    if (mode === "edit" && prefill?.id) {
+      router.put(route('doctor.patients.calculators.das28.update', [patient.id, prefill.id]), payload, {
+        preserveScroll: true,
+        onSuccess: () => router.visit(route('doctor.patients.overview', patient.id)),
+      });
+    } else {
+      router.post(route('doctor.patients.calculators.das28.store', patient.id), payload, {
+        preserveScroll: true,
+        onSuccess: () => router.visit(route('doctor.patients.overview', patient.id)),
+      });
+    }
   };
-
-  router.post(route('doctor.patients.calculators.das28.store', patient.id), payload, {
-    preserveScroll: true,
-    onSuccess: () => {
-      router.visit(route('doctor.patients.overview', patient.id));
-    },
-  });
-};
 
   const toggleTender = id => setTender(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
   const toggleSwollen = id => setSwollen(p => p.includes(id) ? p.filter(x => x !== id) : [...p, id]);
@@ -154,7 +141,9 @@ export default function Das28() {
       <div className="max-w-6xl mx-auto p-6 space-y-6">
         {/* Header */}
         <div className="flex items-center justify-between">
-          <h1 className="text-2xl font-semibold">DAS28 · {patient.name}</h1>
+          <h1 className="text-2xl font-semibold">
+            {mode === "edit" ? "Edit DAS28" : "DAS28"} · {patient?.name}
+          </h1>
           <Link href={route('doctor.patients.calculators.index', patient.id)} className="text-blue-600 hover:underline">
             Back to Calculators
           </Link>
@@ -189,17 +178,21 @@ export default function Das28() {
             <div className="mt-4 space-y-3">
               <div>
                 <label className="block text-sm text-slate-600 mb-1">ESR (mm/hr)</label>
-                <input type="number" min="0" step="0.1" value={esr}
-                       onChange={e=>setEsr(e.target.value)}
-                       className="w-full rounded-lg border px-3 py-2" placeholder="e.g. 25" />
+                <input
+                  type="number" min="0" step="0.1" value={esr}
+                  onChange={e=>setEsr(e.target.value)}
+                  className="w-full rounded-lg border px-3 py-2" placeholder="e.g. 25"
+                />
                 <div className="text-xs text-slate-500 mt-1">Required for ESR variant</div>
               </div>
 
               <div>
                 <label className="block text-sm text-slate-600 mb-1">CRP (mg/L)</label>
-                <input type="number" min="0" step="0.1" value={crp}
-                       onChange={e=>setCrp(e.target.value)}
-                       className="w-full rounded-lg border px-3 py-2" placeholder="e.g. 8" />
+                <input
+                  type="number" min="0" step="0.1" value={crp}
+                  onChange={e=>setCrp(e.target.value)}
+                  className="w-full rounded-lg border px-3 py-2" placeholder="e.g. 8"
+                />
                 <div className="text-xs text-slate-500 mt-1">Required for CRP variant</div>
               </div>
 
@@ -210,9 +203,7 @@ export default function Das28() {
                   <span className="text-xl">😀</span>
                   <input
                     type="range"
-                    min="0"
-                    max="100"
-                    step="1"
+                    min="0" max="100" step="1"
                     value={gh || 0}
                     onChange={e => setGh(e.target.value)}
                     className="w-full accent-blue-600"
@@ -231,21 +222,25 @@ export default function Das28() {
             </div>
           </div>
 
-          {/* Counts & quick calc */}
-          <div className="rounded-2xl border p-4 shadow-sm bg-white">
-            <div className="mb-2 font-semibold">Counts</div>
-            <div className="grid grid-cols-2 gap-3 text-sm">
-              <div className="rounded-lg bg-slate-50 p-3">
-                <div className="text-slate-600">Tender (TJC28)</div>
-                <div className="text-2xl font-semibold">{tjc}</div>
-              </div>
-              <div className="rounded-lg bg-slate-50 p-3">
-                <div className="text-slate-600">Swollen (SJC28)</div>
-                <div className="text-2xl font-semibold">{sjc}</div>
+          {/* Counts & Formula & quick calc */}
+          <div className="rounded-2xl border p-4 shadow-sm bg-white space-y-4">
+            {/* Counts */}
+            <div>
+              <div className="mb-2 font-semibold">Counts</div>
+              <div className="grid grid-cols-2 gap-3 text-sm">
+                <div className="rounded-lg bg-slate-50 p-3">
+                  <div className="text-slate-600">Tender (TJC28)</div>
+                  <div className="text-2xl font-semibold">{tjc}</div>
+                </div>
+                <div className="rounded-lg bg-slate-50 p-3">
+                  <div className="text-slate-600">Swollen (SJC28)</div>
+                  <div className="text-2xl font-semibold">{sjc}</div>
+                </div>
               </div>
             </div>
 
-            <div className="mt-4 space-y-2 text-sm">
+            {/* Quick calc */}
+            <div className="mt-2 space-y-2 text-sm">
               <div className="flex items-center justify-between">
                 <span>DAS28-ESR</span>
                 <span className="font-semibold">{esrScore?.toFixed(2) ?? '-'}</span>
@@ -253,6 +248,24 @@ export default function Das28() {
               <div className="flex items-center justify-between">
                 <span>DAS28-CRP</span>
                 <span className="font-semibold">{crpScore?.toFixed(2) ?? '-'}</span>
+              </div>
+            </div>
+
+            {/* Formula (beautified like CDAI) */}
+            <div className="rounded-xl border overflow-hidden">
+              <div className="px-4 py-2 bg-gradient-to-r from-indigo-50 via-blue-50 to-cyan-50 border-b">
+                <div className="text-xs tracking-wide text-slate-600">Formula</div>
+                <div className="text-sm font-medium text-slate-800">
+                  <span className="font-semibold">DAS28-ESR</span> = 0.56·√(TJC28) + 0.28·√(SJC28) + 0.70·ln(ESR) + 0.014·GH
+                </div>
+                <div className="text-sm font-medium text-slate-800">
+                  <span className="font-semibold">DAS28-CRP</span> = 0.56·√(TJC28) + 0.28·√(SJC28) + 0.36·ln(CRP+1) + 0.014·GH + 0.96
+                </div>
+              </div>
+              <div className="p-4 space-y-2">
+                <div className="text-xs text-slate-500">
+                  Tip: TJC/SJC are counts (0–28). GH is patient global health (0–100 mm VAS). ln = natural log; √ = square root.
+                </div>
               </div>
             </div>
           </div>
@@ -282,11 +295,17 @@ export default function Das28() {
 
             <button
               onClick={onSave}
-              disabled={form.processing || !currentScore}
+              disabled={!currentScore}
               className="mt-4 w-full rounded-xl bg-emerald-600 text-white py-2.5 hover:bg-emerald-700 disabled:opacity-50"
             >
-              Save DAS28 to Patient
+              {mode === "edit" ? "Update DAS28" : "Save DAS28 to Patient"}
             </button>
+ <li className="flex items-center justify-between rounded-lg border px-3 py-1.5 border-emerald-200 bg-emerald-50 text-emerald-800">
+                  <span className="font-medium"> The Disease Activity Score with 28 joint counts (DAS28) is a widely used index to assess rheumatoid arthritis activity</span>
+                 
+                </li>
+
+
           </div>
         </div>
       </div>

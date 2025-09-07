@@ -5,10 +5,22 @@ namespace App\Http\Controllers\Doctor;
 use App\Http\Controllers\Controller;
 use App\Models\Patient;
 use App\Models\LabOrder;
-use App\Models\Das28Assessment;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 use Inertia\Inertia;
+use App\Models\Das28Assessment;
+use App\Models\CdaiAssessment;
+use App\Models\SdaiAssessment;
+use App\Models\BasdaiAssessment;
+use App\Models\AsdasCrpAssessment;
+use App\Models\HaqdiAssessment;
+use App\Models\DapsaAssessment;
+use App\Models\VasEntry;
+use App\Models\BmiEntry;
+use App\Models\EularResponse;
+use Illuminate\Support\Facades\Storage;
+use App\Models\Prescription;
+use Barryvdh\DomPDF\Facade\Pdf;
 
 class PatientController extends Controller
 {
@@ -78,6 +90,9 @@ class PatientController extends Controller
     /** Store patient */
     public function store(Request $request)
     {
+        // Normalize incoming payload (decode allergies if sent as JSON string, null-out blanks)
+        $this->normalizePatientPayload($request);
+
         $nicRegex = '/^(?:\d{9}[VvXx]|\d{12})$/'; // LK NIC: 9 digits + V/X OR 12 digits
 
         $validated = $request->validate([
@@ -193,6 +208,9 @@ class PatientController extends Controller
     /** Update then go back to Overview */
     public function update(Request $request, Patient $patient)
     {
+        // Normalize incoming payload (decode allergies if sent as JSON string, null-out blanks)
+        $this->normalizePatientPayload($request);
+
         $nicRegex = '/^(?:\d{9}[VvXx]|\d{12})$/';
 
         $validated = $request->validate([
@@ -248,6 +266,9 @@ class PatientController extends Controller
         if ($request->hasFile('photo')) {
             $data['photo_path'] = $request->file('photo')->store('patients', 'public');
         }
+        if ($request->hasFile('photo') && $patient->photo_path) {
+            Storage::disk('public')->delete($patient->photo_path);
+        }
 
         $patient->update($data);
 
@@ -268,38 +289,121 @@ class PatientController extends Controller
 
     /** Overview (visits, labs, DAS28) */
     public function overview(Patient $patient)
-    {
-        $recentVisits = $patient->visits()
-            ->orderByDesc('visit_date')
-            ->orderByDesc('created_at')
-            ->select('id','patient_id','visit_date','complaints','provisional_diagnoses','plan','notes','created_at')
-            ->limit(12)
-            ->get();
+{
+    $recentVisits = $patient->visits()
+        ->orderByDesc('visit_date')
+        ->orderByDesc('created_at')
+        ->select('id','patient_id','visit_date','complaints','provisional_diagnoses','plan','notes','created_at')
+        ->limit(12)
+        ->get();
 
-        // expose allergies for the overview card
-        $patient->setVisible(['id','name','national_id','gender','age','dob','phone','district','photo_path','allergies']);
+    // expose these fields on the patient object
+    $patient->setVisible([
+        'id','name','national_id','gender','age','dob','phone','district','photo_path',
+        'allergies','prescriptions'
+    ]);
 
-        $labOrders = LabOrder::with(['items.test','items.result'])
-            ->where('patient_id', $patient->id)
-            ->orderByDesc('ordered_at')
-            ->limit(6)
-            ->get();
+    $labOrders = LabOrder::with(['items.test','items.result'])
+        ->where('patient_id', $patient->id)
+        ->orderByDesc('ordered_at')
+        ->limit(6)
+        ->get();
 
-        $das28 = Das28Assessment::where('patient_id', $patient->id)
-            ->orderByDesc('assessed_at')
-            ->orderByDesc('id')
-            ->limit(5)
-            ->get([
-                'id','variant','score','category','tjc28','sjc28','assessed_at'
-            ]);
+    $das28 = Das28Assessment::where('patient_id', $patient->id)
+        ->orderByDesc('assessed_at')->orderByDesc('id')
+        ->limit(5)
+        ->get(['id','variant','score','category','tjc28','sjc28','assessed_at']);
 
-        return Inertia::render('Doctor/Patient/Overview', [
-            'patient' => $patient,
-            'visits'  => $recentVisits,
-            'lab'     => ['orders' => $labOrders],
-            'das28'   => $das28,
+    $cdai = CdaiAssessment::where('patient_id', $patient->id)
+        ->orderByDesc('assessed_at')
+        ->limit(5)
+        ->get(['id','tjc28','sjc28','ptg','phg','score','category','assessed_at']);
+
+    $sdai = SdaiAssessment::where('patient_id', $patient->id)
+        ->orderByDesc('assessed_at')->orderByDesc('id')
+        ->limit(5)
+        ->get(['id','tjc28','sjc28','pt_global','ph_global','crp','score','assessed_at']);
+
+    $basdai = BasdaiAssessment::where('patient_id', $patient->id)
+        ->orderByDesc('assessed_at')->orderByDesc('id')
+        ->limit(5)
+        ->get(['id','q1','q2','q3','q4','q5','q6','score','assessed_at']);
+
+    $asdas = AsdasCrpAssessment::where('patient_id', $patient->id)
+        ->orderByDesc('assessed_at')->orderByDesc('id')
+        ->limit(5)
+        ->get(['id','back_pain','morning_stiffness_duration','pt_global','peripheral_pain_swelling','crp','score','assessed_at']);
+
+    $haqdi = HaqdiAssessment::where('patient_id', $patient->id)
+        ->orderByDesc('assessed_at')->orderByDesc('id')
+        ->limit(5)
+        ->get(['id','score','assessed_at']);
+
+    $dapsa = DapsaAssessment::where('patient_id', $patient->id)
+        ->orderByDesc('assessed_at')->orderByDesc('id')
+        ->limit(5)
+        ->get(['id','tjc68','sjc66','pt_global','pain','crp','score','assessed_at']);
+
+    $vas = VasEntry::where('patient_id', $patient->id)
+        ->orderByDesc('assessed_at')->orderByDesc('id')
+        ->limit(5)
+        ->get(['id','label','value','assessed_at']);
+
+    $bmi = BmiEntry::where('patient_id', $patient->id)
+        ->orderByDesc('assessed_at')->orderByDesc('id')
+        ->limit(5)
+        ->get(['id','weight_kg','height_m','bmi','band','assessed_at']);
+
+    $eular = EularResponse::where('patient_id', $patient->id)
+        ->orderByDesc('assessed_at')->orderByDesc('id')
+        ->limit(5)
+        ->get(['id','baseline_das28','current_das28','delta','response','assessed_at']);
+
+    // ✅ Build prescriptions NOW
+    $prescriptions = Prescription::with('items')
+        ->with(['creator:id,name','editor:id,name'])
+        ->where('patient_id', $patient->id)
+        ->latest('prescribed_date')->latest('id')
+        ->limit(5)
+        ->get()
+        ->map(fn($p)=>[
+            'id'=>$p->id,
+            'prescribed_date'=>optional($p->prescribed_date)->toDateString(),
+            'diagnosis'=>$p->diagnosis,
+            'created_at'=>$p->created_at,
+            'updated_at'=>$p->updated_at,
+            'created_by_name'=>$p->creator?->name,
+            'updated_by_name'=>$p->editor?->name,
+            'items'=>$p->items->map(fn($i)=>[
+                'id'=>$i->id,
+                'drug_name_cache'=>$i->drug_name_cache,
+                'dosage'=>$i->dosage,
+                'frequency'=>$i->frequency,
+                'duration'=>$i->duration,
+                'route'=>$i->route,
+            ]),
         ]);
+
+    // ✅ Attach AFTER it exists
+    $patient->setAttribute('prescriptions', $prescriptions);
+
+    return Inertia::render('Doctor/Patient/Overview', [
+        'patient' => $patient,
+        'visits'  => $recentVisits,
+        'lab'     => ['orders' => $labOrders],
+        'das28'   => $das28,
+        'cdai'    => $cdai,
+        'sdai'    => $sdai,
+        'basdai'  => $basdai,
+        'asdas'   => $asdas,
+        'haqdi'   => $haqdi,
+        'dapsa'   => $dapsa,
+        'vas'     => $vas,
+        'bmi'     => $bmi,
+        'eular'   => $eular,
+    ]);
     }
+
 
     /** Global quick-search */
     public function quickSearch(Request $request)
@@ -327,4 +431,120 @@ class PatientController extends Controller
 
         return redirect()->route('doctor.patients.index', ['search' => $q]);
     }
+
+    /** Decode allergies JSON string & nullify empty strings */
+    protected function normalizePatientPayload(Request $request): void
+    {
+        // If allergies comes as a JSON string (common with multipart), decode it
+        if ($request->has('allergies') && is_string($request->input('allergies'))) {
+            $decoded = json_decode($request->input('allergies'), true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($decoded)) {
+                $request->merge(['allergies' => $decoded]);
+            }
+        }
+
+        // Convert empty strings to null for these fields
+        foreach ([
+            'dob','age','phone','email','address_line1','address_line2','village',
+            'district','province','guardian_name','guardian_relationship',
+            'emergency_contact_name','emergency_contact_phone','religion','occupation',
+            'health_scheme','chronic_conditions','disability_status','remarks',
+        ] as $key) {
+            if ($request->has($key) && $request->input($key) === '') {
+                $request->merge([$key => null]);
+            }
+        }
+    }
+
+    public function printOverview(Patient $patient)
+{
+    // keep same visibility as overview card
+    $patient->setVisible(['id','name','national_id','gender','age','dob','phone','district','photo_path','allergies']);
+
+    // Recent Visits
+    $recentVisits = $patient->visits()
+        ->orderByDesc('visit_date')
+        ->orderByDesc('created_at')
+        ->select('id','patient_id','visit_date','complaints','provisional_diagnoses','plan','notes','created_at')
+        ->limit(12)
+        ->get();
+
+    // Lab Orders
+    $labOrders = LabOrder::with(['items.test','items.result'])
+        ->where('patient_id', $patient->id)
+        ->orderByDesc('ordered_at')
+        ->limit(6)
+        ->get();
+
+    // Calculators (same limits you used in overview)
+    $das28 = Das28Assessment::where('patient_id', $patient->id)
+        ->orderByDesc('assessed_at')->orderByDesc('id')
+        ->limit(5)->get(['id','variant','score','category','tjc28','sjc28','assessed_at']);
+
+    $cdai = CdaiAssessment::where('patient_id', $patient->id)
+        ->orderByDesc('assessed_at')->orderByDesc('id')
+        ->limit(5)->get(['id','tjc28','sjc28','ptg','phg','score','category','assessed_at']);
+
+    $sdai = SdaiAssessment::where('patient_id', $patient->id)
+        ->orderByDesc('assessed_at')->orderByDesc('id')
+        ->limit(5)->get(['id','tjc28','sjc28','pt_global','ph_global','crp','score','assessed_at']);
+
+    $basdai = BasdaiAssessment::where('patient_id', $patient->id)
+        ->orderByDesc('assessed_at')->orderByDesc('id')
+        ->limit(5)->get(['id','q1','q2','q3','q4','q5','q6','score','assessed_at']);
+
+    $asdas = AsdasCrpAssessment::where('patient_id', $patient->id)
+        ->orderByDesc('assessed_at')->orderByDesc('id')
+        ->limit(5)->get(['id','back_pain','morning_stiffness_duration','pt_global','peripheral_pain_swelling','crp','score','assessed_at']);
+
+    $haqdi = HaqdiAssessment::where('patient_id', $patient->id)
+        ->orderByDesc('assessed_at')->orderByDesc('id')
+        ->limit(5)->get(['id','score','assessed_at']);
+
+    $dapsa = DapsaAssessment::where('patient_id', $patient->id)
+        ->orderByDesc('assessed_at')->orderByDesc('id')
+        ->limit(5)->get(['id','tjc68','sjc66','pt_global','pain','crp','score','assessed_at']);
+
+    $vas = VasEntry::where('patient_id', $patient->id)
+        ->orderByDesc('assessed_at')->orderByDesc('id')
+        ->limit(5)->get(['id','label','value','assessed_at']);
+
+    $bmi = BmiEntry::where('patient_id', $patient->id)
+        ->orderByDesc('assessed_at')->orderByDesc('id')
+        ->limit(5)->get(['id','weight_kg','height_m','bmi','band','assessed_at']);
+
+    $eular = EularResponse::where('patient_id', $patient->id)
+        ->orderByDesc('assessed_at')->orderByDesc('id')
+        ->limit(5)->get(['id','baseline_das28','current_das28','delta','response','assessed_at']);
+
+    // Prescriptions (recent 5)
+    $prescriptions = Prescription::with('items')
+        ->with(['creator:id,name','editor:id,name'])
+        ->where('patient_id', $patient->id)
+        ->latest('prescribed_date')->latest('id')
+        ->limit(5)
+        ->get();
+
+    $pdf = Pdf::loadView('pdf.patient-overview', [
+        'patient'        => $patient,
+        'visits'         => $recentVisits,
+        'labOrders'      => $labOrders,
+        'das28'          => $das28,
+        'cdai'           => $cdai,
+        'sdai'           => $sdai,
+        'basdai'         => $basdai,
+        'asdas'          => $asdas,
+        'haqdi'          => $haqdi,
+        'dapsa'          => $dapsa,
+        'vas'            => $vas,
+        'bmi'            => $bmi,
+        'eular'          => $eular,
+        'prescriptions'  => $prescriptions,
+        // helper flag
+        'hasAllergies'   => (bool)((($patient->allergies['types'] ?? []) || ($patient->allergies['note'] ?? null))),
+    ]);
+
+    return $pdf->stream("patient-{$patient->id}-overview.pdf");
+    }
+
 }

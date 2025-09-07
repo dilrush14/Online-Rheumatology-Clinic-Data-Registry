@@ -6,6 +6,7 @@ use App\Models\User;
 // use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 
+
 class DatabaseSeeder extends Seeder
 {
     /**
@@ -30,7 +31,20 @@ class DatabaseSeeder extends Seeder
         $doctor = User::firstOrCreate(
             ['email' => 'doctor@test.com'],
             [
-                'name' => 'Doctor',
+                'name' => 'Dr.Mallawarachchi',
+                'password' => bcrypt('password'),
+                'role' => 'doctor',
+            ]);
+
+        if (! $doctor->hasVerifiedEmail()) {
+            $doctor->markEmailAsVerified();
+        }
+
+        // Example: Create a test doctor2 user
+        $doctor = User::firstOrCreate(
+            ['email' => 'doctor2@test.com'],
+            [
+                'name' => 'Dr.Dissanayaka',
                 'password' => bcrypt('password'),
                 'role' => 'doctor',
             ]);
@@ -66,7 +80,8 @@ class DatabaseSeeder extends Seeder
         }
         // Repeat for admin, nurse, or others if needed
 
-
+  $this->call(IcdTermsSeeder::class);
+   $this->call(DrugSeeder::class);
 
     }
 }

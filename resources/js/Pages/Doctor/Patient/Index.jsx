@@ -46,7 +46,13 @@ function Avatar({ name, photo_path }) {
 }
 
 export default function Index() {
-  const { patients, filters, flash } = usePage().props;
+  const { patients, filters, flash, auth } = usePage().props;
+
+  // --- role flags (used to disable Delete for nurses) ---
+  const role = (auth?.user?.role ?? 'user').toString().toLowerCase();
+  const isNurse = role === 'nurse';
+  const canDelete = !isNurse; // everyone except nurse can delete
+
   const [search, setSearch] = useState(filters?.search || '');
 
   // debounce fetch
@@ -75,7 +81,7 @@ export default function Index() {
             className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700"
           >
             <Plus size={16} />
-            Add Patient
+            Register Patient
           </Link>
         </div>
 
@@ -142,7 +148,6 @@ export default function Index() {
                               {p.name}
                             </Link>
                           </div>
-                          
                         </div>
                       </td>
                       <td className="px-4 py-3 text-gray-700">{p.national_id}</td>
@@ -175,14 +180,26 @@ export default function Index() {
                             <span className="hidden sm:inline">Edit</span>
                           </Link>
 
-                          <DeleteButton
-                            patientId={p.id}
-                            className="inline-flex items-center gap-1 rounded border px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
-                            confirmText={`Delete ${p.name}? This cannot be undone.`}
-                          >
-                            <Trash2 size={14} />
-                            <span className="hidden sm:inline">Delete</span>
-                          </DeleteButton>
+                          {canDelete ? (
+                            <DeleteButton
+                              patientId={p.id}
+                              className="inline-flex items-center gap-1 rounded border px-2.5 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                              confirmText={`Delete ${p.name}? This cannot be undone.`}
+                            >
+                              <Trash2 size={14} />
+                              <span className="hidden sm:inline">Delete</span>
+                            </DeleteButton>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled
+                              title="Nurses cannot delete patients"
+                              className="inline-flex items-center gap-1 rounded border px-2.5 py-1 text-xs font-medium text-gray-400 cursor-not-allowed bg-gray-50"
+                            >
+                              <Trash2 size={14} />
+                              <span className="hidden sm:inline">Delete</span>
+                            </button>
+                          )}
                         </div>
                       </td>
                     </tr>

@@ -1,4 +1,3 @@
-// D:\rheumatology\project-rheuma\resources\js\Pages\Doctor\Patient\Create.jsx
 import React, { useEffect } from 'react';
 import { useForm, usePage } from '@inertiajs/react';
 import AppShell from '@/components/app-shell';
@@ -154,8 +153,7 @@ export default function Create() {
     // Clinical
     chronic_conditions: '',
     disability_status: '',
-    // store as structured object locally; will be JSON.stringified on submit
-    allergies: { types: [], note: '' },
+    allergies: { types: [], note: '' }, // object in UI
 
     // Media
     photo: null,
@@ -191,17 +189,19 @@ export default function Create() {
 
   const handleSubmit = (e) => {
     e.preventDefault();
+    const useFormData = !!data.photo;
 
-    // Ensure allergies is a JSON string to satisfy backend 'string' validation
     const payload = {
       ...data,
-      allergies:
-        data.allergies && typeof data.allergies === 'object'
-          ? JSON.stringify(data.allergies)
-          : (data.allergies || ''),
+      // Only stringify when using FormData; otherwise send an object (Laravel validates as array)
+      allergies: useFormData ? JSON.stringify(data.allergies || {}) : (data.allergies || {}),
     };
 
-    post(route('doctor.patients.store'), { data: payload, forceFormData: true });
+    post(route('doctor.patients.store'), {
+      data: payload,
+      forceFormData: useFormData,
+      preserveScroll: false,
+    });
   };
 
   return (
@@ -217,15 +217,13 @@ export default function Create() {
               Create a new patient record. Fields marked <span className="text-red-600">*</span> are required.
             </p>
           </div>
-          <button
-            type="submit"
-            form="patient-create-form"
-            disabled={processing}
-            className="inline-flex items-center gap-2 rounded-lg bg-indigo-600 px-3 py-2 text-sm font-semibold text-white hover:bg-indigo-700 disabled:opacity-50"
-          >
-            <Plus size={16} />
-            {processing ? 'Saving…' : 'Register Patient'}
-          </button>
+            <button
+              type="button"
+              onClick={() => window.history.back()}
+              className="inline-flex items-center gap-2 rounded-lg border border-gray-300 bg-white px-3 py-2 text-sm font-semibold text-gray-700 hover:bg-gray-50"
+              >
+              BACK
+            </button>
         </div>
 
         <form
@@ -607,7 +605,8 @@ export default function Create() {
                     </button>
                   ))}
                 </div>
-                {/* Show errors keyed as "allergies.types" if your validator returns them that way */}
+                {/* Root errors and nested errors */}
+                <ErrorText>{errors?.allergies}</ErrorText>
                 <ErrorText>{errors?.['allergies.types'] || errors?.['allergies.types.*']}</ErrorText>
               </div>
 

@@ -130,6 +130,17 @@ export default function AppSidebar() {
         },
       ],
     },
+    {
+      title: 'Patient Overview',
+      links: [
+        {
+          label: 'Patients',
+          href: route('doctor.patients.index'),
+          activeWhen: ['doctor.patients.*'],
+          icon: Clipboard,
+        },
+      ],
+    },
   ];
 
   // Doctor
@@ -163,8 +174,18 @@ export default function AppSidebar() {
     {
       title: 'Nurse',
       links: [
-        { label: 'Dashboard', href: '/nurse/dashboard', activeWhen: null, icon: LayoutGrid },
-        { label: 'Assignments', href: '/nurse/assignments', activeWhen: null, icon: Clipboard },
+        { label: 'Dashboard', href: route('nurse.dashboard'), activeWhen: 'nurse.dashboard', icon: LayoutGrid },
+      ],
+    },
+    {
+      title: 'Patient Overview',
+      links: [
+        {
+          label: 'Patients',
+          href: route('doctor.patients.index'),
+          activeWhen: ['doctor.patients.*'],
+          icon: Clipboard,
+        },
       ],
     },
   ];
@@ -174,11 +195,34 @@ export default function AppSidebar() {
     {
       title: 'Consultant',
       links: [
-        { label: 'Dashboard', href: '/consultant/dashboard', activeWhen: null, icon: LayoutGrid },
-        { label: 'Reports', href: '/consultant/reports', activeWhen: null, icon: BarChart },
+        { label: 'Dashboard', href: route('consultant.dashboard'), activeWhen: 'consultant.dashboard', icon: LayoutGrid },
+      ],
+    },
+    {
+      title: 'Patient Overview',
+      links: [
+        {
+          label: 'Patients',
+          href: route('doctor.patients.index'),
+          activeWhen: ['doctor.patients.*'],
+          icon: Clipboard,
+        },
       ],
     },
   ];
+
+  // Shared "Data Analysis" section for admin, doctor, consultant
+  const analysisNav: NavSection = {
+    title: 'Insights',
+    links: [
+      {
+        label: 'Data Analysis',
+        href: route('analytics.index'),
+        activeWhen: ['analytics.*'],
+        icon: BarChart,
+      },
+    ],
+  };
 
   const roleNav: NavSection[] =
     role === 'admin'
@@ -191,7 +235,15 @@ export default function AppSidebar() {
       ? consultantNav
       : [];
 
-  const navGroups: NavSection[] = [...globalNav, ...roleNav];
+  //  const showAnalysis = ['admin', 'doctor', 'consultant'].includes(role);
+  // Only Admin & Consultant should see "Data Analysis"
+  const showAnalysis = role === 'admin' || role === 'consultant';
+
+  const navGroups: NavSection[] = [
+    ...globalNav,
+    ...roleNav,
+    ...(showAnalysis ? [analysisNav] : []),
+  ];
 
   return (
     <aside className="w-64 bg-indigo-50 text-sm min-h-screen border-r border-gray-300 flex flex-col">

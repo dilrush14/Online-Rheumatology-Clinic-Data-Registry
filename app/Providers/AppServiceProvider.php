@@ -56,7 +56,6 @@ public function boot(): void
                 ],
                 UserRole::NURSE => [
                     'Dashboard' => route('nurse.dashboard'),
-                    //'Assignments' => route('nurse.assignments'), // check if exists
                 ],
                 UserRole::CONSULTANT => [
                     'Dashboard' => route('consultant.dashboard'), // check
